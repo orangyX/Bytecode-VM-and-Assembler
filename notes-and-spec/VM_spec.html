@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TinyVM — Build Specification &amp; Self-Assessment</title>
+<style>
+  :root {
+    --ink:      #12161c;
+    --ink-soft: #3d454f;
+    --paper:    #f7f5f0;
+    --panel:    #ffffff;
+    --line:     #d9d5cb;
+    --line-soft:#e8e4da;
+    --accent:   #1f6f6b;   /* deep teal — terminal/oscilloscope green's grown-up cousin */
+    --accent-d: #16514e;
+    --amber:    #b5741a;   /* for traps / warnings */
+    --amber-bg: #fbf1df;
+    --done-bg:  #e7f0ea;
+    --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+    --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 64px 32px 120px;
+  }
+
+  /* ---- Masthead ---- */
+  header.mast {
+    border-bottom: 3px solid var(--ink);
+    padding-bottom: 28px;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent-d);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(2.1rem, 5vw, 3rem);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    font-weight: 800;
+  }
+  h1 .vm { color: var(--accent); }
+  .lede {
+    font-size: 1.06rem;
+    color: var(--ink-soft);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  /* ---- Section scaffolding ---- */
+  section { margin-top: 56px; }
+  h2 {
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+    margin: 0 0 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    padding: 1px 7px;
+    letter-spacing: 0.05em;
+    flex: none;
+  }
+  h3 {
+    font-size: 0.98rem;
+    margin: 22px 0 8px;
+    letter-spacing: 0.01em;
+  }
+
+  p { margin: 0 0 14px; }
+
+  a { color: var(--accent-d); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: #eeeae0;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  ul { margin: 0 0 14px; padding-left: 0; list-style: none; }
+  ul li { position: relative; padding-left: 20px; margin-bottom: 7px; }
+  ul li::before {
+    content: "›";
+    position: absolute; left: 4px; top: -1px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  /* checkbox lists */
+  ul.check li { padding-left: 30px; }
+  ul.check li::before {
+    content: "";
+    position: absolute; left: 2px; top: 5px;
+    width: 15px; height: 15px;
+    border: 1.5px solid var(--ink-soft);
+    border-radius: 3px;
+    background: var(--panel);
+  }
+
+  /* ---- Callout panels ---- */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 20px 0;
+  }
+  .panel.tight { padding: 16px 22px; }
+
+  .done {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-d);
+    background: var(--done-bg);
+    border: 1px solid #bcd6c9;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-left: auto;
+  }
+
+  .star {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #8a5a12;
+    background: var(--amber-bg);
+    border: 1px solid #e6cfa0;
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-left: auto;
+  }
+
+  /* traps */
+  .traps {
+    background: var(--amber-bg);
+    border: 1px solid #e6cfa0;
+    border-left: 4px solid var(--amber);
+    border-radius: 6px;
+    padding: 16px 22px;
+    margin: 18px 0;
+  }
+  .traps .traps-h {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8a5a12;
+    margin: 0 0 10px;
+  }
+  .traps ul li::before { content: "▲"; font-size: 0.7em; color: var(--amber); top: 1px; }
+
+  .doneline {
+    font-size: 0.96rem;
+    background: var(--done-bg);
+    border-left: 4px solid var(--accent);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 18px;
+    margin: 16px 0;
+  }
+  .doneline strong { color: var(--accent-d); }
+
+  .goal {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* ---- Model diagram ---- */
+  .model {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin: 18px 0;
+  }
+  .model .cell {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .model .cell h4 {
+    margin: 0 0 6px;
+    font-size: 0.92rem;
+    font-family: var(--mono);
+    color: var(--accent-d);
+  }
+  .model .cell p { margin: 0; font-size: 0.88rem; color: var(--ink-soft); }
+
+  /* ---- Tables ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin: 16px 0;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line-soft);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-d);
+    border-bottom: 2px solid var(--line);
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td code { background: none; padding: 0; }
+
+  /* ---- Rubric ---- */
+  ol.rubric { counter-reset: r; list-style: none; padding: 0; margin: 0; }
+  ol.rubric li {
+    position: relative;
+    padding: 4px 0 4px 42px;
+    margin-bottom: 12px;
+  }
+  ol.rubric li::before {
+    counter-increment: r;
+    content: counter(r);
+    position: absolute; left: 0; top: 2px;
+    width: 26px; height: 26px;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+  }
+
+  .note {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    font-style: italic;
+    border-top: 1px dashed var(--line);
+    padding-top: 14px;
+    margin-top: 22px;
+  }
+
+  footer {
+    margin-top: 72px;
+    padding-top: 20px;
+    border-top: 3px solid var(--ink);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+  }
+
+  @media (max-width: 620px) {
+    .wrap { padding: 40px 20px 80px; }
+    .model { grid-template-columns: 1fr; }
+    h2 { flex-wrap: wrap; }
+  }
+
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .wrap { max-width: none; padding: 0 12px; }
+    section { break-inside: avoid; page-break-inside: avoid; }
+    .panel, .traps, .model .cell { break-inside: avoid; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">Build Specification &amp; Self-Assessment</p>
+    <h1>Tiny<span class="vm">VM</span> — a stack-based bytecode virtual machine</h1>
+    <p class="lede">A stage-by-stage spec for building a bytecode VM and its assembler in C.
+    It defines <em>what</em> each stage must achieve, <em>how you'll know it's done</em>, and
+    <em>the traps to watch for</em> — but never the code. The implementation is yours.</p>
+  </header>
+
+  <section>
+    <h2><span class="num">§0</span> Ground rules — the assessment contract</h2>
+    <ul>
+      <li><strong>No code or pseudocode is provided.</strong> Guidance is conceptual only: mechanisms, models, and the <em>why</em>. Translating to C is your job.</li>
+      <li><strong>You must be able to explain every line you write.</strong> If you can't explain why something works, it isn't done — even if it compiles and runs.</li>
+      <li><strong>Debugging help is allowed.</strong> When something won't compile or misbehaves, the <em>reason</em> is explained; the fix stays yours to type.</li>
+      <li><strong>Build in layers.</strong> Each stage must run and be verified before the next. Add a capability when a program you're trying to run demands it — not speculatively.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">◎</span> The end goal</h2>
+    <p>A working VM that runs real programs written in a small assembly language, including <strong>recursive function calls</strong>. The headline acceptance test:</p>
+    <div class="doneline"><strong>Acceptance:</strong> a recursive Fibonacci program, assembled from a text file, prints <code>fib(20) = 6765</code>.</div>
+    <p>If that works, the machine's core — stack, control flow, locals, and call frames — is provably correct.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">△</span> The mental model — hold this throughout</h2>
+    <p>Three independent pieces. Keeping them separate is what makes the project tractable and testable.</p>
+    <div class="model">
+      <div class="cell"><h4>The program</h4><p>An array of instructions (operation + optional operand). Static data — the <em>recipe</em>.</p></div>
+      <div class="cell"><h4>The VM</h4><p>A loop with state: a program counter + an operand stack (later, a call stack). Reads instructions and <em>performs</em> them — the <em>cook</em>.</p></div>
+      <div class="cell"><h4>The assembler</h4><p>A translator: text in, instruction array out. A convenience for humans. The VM never needs to know it exists.</p></div>
+    </div>
+    <p>Two regions of memory, two jobs: the <strong>program array</strong> (recipe — read top to bottom, never changes while running) versus the <strong>operand stack</strong> (countertop — where values actually move during execution).</p>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 0</span> Representation &amp; disassembler <span class="done">Complete</span></h2>
+    <p class="goal">Goal: prove the data model. No execution yet.</p>
+    <h3>Must have</h3>
+    <ul class="check">
+      <li>An <code>enum</code> of operations (the vocabulary).</li>
+      <li>An instruction <code>struct</code>: which operation + one operand value.</li>
+      <li>A hand-built program as an array of instructions.</li>
+      <li>A <strong>name helper</strong>: operation → name string. Single source of truth for names. (A <code>switch</code> returning string literals; no allocation.)</li>
+      <li>A <strong>disassembler loop</strong> that walks the array and prints each instruction in readable form, delegating naming to the helper.</li>
+    </ul>
+    <div class="doneline"><strong>Done when:</strong> the program prints its own instructions back in words (<code>PUSH 10</code>, <code>DIVIDE</code>, …), using a real loop whose length is computed from the array — not a hardcoded count.</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>Enum members are integers at runtime; names exist only in source. You must supply the integer→name mapping yourself.</li>
+        <li>Use <strong>name labels</strong> in <code>switch</code> cases (<code>case PUSH:</code>), never magic numbers (<code>case 4:</code>) — the latter breaks silently if the enum is reordered.</li>
+        <li><code>sizeof(array)/sizeof(array[0])</code> gives element count — <strong>but only where the real array is visible.</strong> It breaks the moment the array is passed to a function (decays to a pointer).</li>
+        <li><code>main</code> returns <code>int</code> (status: <code>0</code> = success). Unrelated to any string return.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 1</span> The execution loop</h2>
+    <p class="goal">Goal: make it <em>run</em>. Instructions now <em>do</em> things instead of being printed.</p>
+    <h3>New concepts</h3>
+    <ul>
+      <li><strong>Operand stack</strong> — storage for values (an array) + a way to track the top. Decide: what holds the values, and what single piece of state tracks where the top is (updated on every push/pop)?</li>
+      <li><strong>Program counter</strong> — an index for "which instruction is next."</li>
+      <li><strong>Fetch–decode–execute loop</strong> — read the instruction at the counter, do what it says, advance. Structurally a <code>switch</code> over operations (the twin of your name helper, but each case <em>acts</em> instead of <em>returning a name</em>).</li>
+    </ul>
+    <h3>Must support (minimum to run <code>2 + 3</code>)</h3>
+    <ul class="check">
+      <li>A "push constant" operation.</li>
+      <li>Arithmetic: add, subtract, multiply, divide.</li>
+      <li>A way to <strong>observe</strong> a result (print top of stack).</li>
+      <li>A way to <strong>halt</strong> (stop the loop cleanly).</li>
+    </ul>
+    <div class="doneline"><strong>Done when:</strong> a hand-built program computes an arithmetic result and prints it correctly (e.g. <code>10 / 5</code>, then <code>+ 3</code>, prints <code>5</code>).</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>In this <code>switch</code>, cases <strong>do not return</strong> — so each needs <code>break</code>. Forgetting it causes fall-through (one case bleeds into the next): a classic bug.</li>
+        <li><strong>Pop order is reversed.</strong> The last value pushed is the first popped. Irrelevant for <code>ADD</code>/<code>MUL</code>, but for <code>SUB</code>/<code>DIV</code> you must decide which popped value is the left operand. Fix and document the convention now.</li>
+        <li>Guard the stack: pushing when full (overflow) or popping when empty (underflow) must fail loudly, not corrupt memory. Bounds-check early.</li>
+        <li>Divide-by-zero must be handled, not left to crash.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 2</span> Control flow — jumps</h2>
+    <p class="goal">Goal: branching and loops.</p>
+    <h3>New operations</h3>
+    <ul class="check">
+      <li>Unconditional jump (set the program counter to a target instruction).</li>
+      <li>Conditional jump(s) — e.g. jump if top-of-stack is zero / non-zero (which pops the tested value).</li>
+      <li>Comparisons (equal, less-than, …) that push a 1/0 result — same pop-pop-combine-push rhythm as arithmetic.</li>
+    </ul>
+    <div class="doneline"><strong>Done when:</strong> an <em>iterative</em> program using a loop works — e.g. sum 1..10 → <code>55</code>.</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>A jump target is an <strong>index into the program array</strong>, not a byte offset (given fixed-size instruction structs). Be clear which.</li>
+        <li>Advance the program counter <em>before</em> executing, so a jump can cleanly overwrite it without being re-incremented.</li>
+        <li>Off-by-one loops: verify the boundary instruction runs the intended number of times.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 3</span> Local variables</h2>
+    <p class="goal">Goal: named storage beyond the operand stack.</p>
+    <h3>New operations</h3>
+    <ul class="check">
+      <li>Load a local (push the value in slot <em>n</em> onto the stack).</li>
+      <li>Store a local (pop the stack into slot <em>n</em>).</li>
+    </ul>
+    <p>Concept: locals live in a fixed set of slots, addressed by number. For now, a single set of slots is enough (per-frame locals arrive in Stage 4).</p>
+    <div class="doneline"><strong>Done when:</strong> an <em>iterative factorial</em> works using a local accumulator (e.g. <code>fact(10) = 3628800</code>).</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>Bounds-check the slot index.</li>
+        <li>Keep straight what's a <em>stack</em> value vs. a <em>local</em> value — different storage.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 4</span> Function calls &amp; frames <span class="star">★ core stage</span></h2>
+    <p class="goal">Goal: real function calls with their own local scope, enabling recursion. This is you re-implementing the call-stack mechanism you studied in systems.</p>
+    <h3>New concepts</h3>
+    <ul>
+      <li><strong>Call frame</strong> — bundles a return address + that call's own local slots.</li>
+      <li><strong>Call stack</strong> — a stack <em>of frames</em> (separate from the operand stack).</li>
+      <li><strong>Call</strong> operation — carries a target address and an argument count. It creates a new frame, moves the arguments off the operand stack into the new frame's locals, records where to resume, and jumps to the target.</li>
+      <li><strong>Return</strong> operation — restores the program counter to the saved return address and discards the frame. The return value is <em>already on the shared operand stack</em> (the function left it there), so nothing extra is plumbed.</li>
+    </ul>
+    <h3>Decisions you must make and defend</h3>
+    <ul>
+      <li>Argument order: arguments are pushed left-to-right; popping is reverse — how do you place them into locals so their order is preserved?</li>
+      <li>Where does the return value live so the caller can use it seamlessly?</li>
+    </ul>
+    <div class="doneline"><strong>Done when:</strong> recursive Fibonacci prints <code>fib(20) = 6765</code>. Verify a second recursive function (e.g. GCD by Euclid) to prove it wasn't a fluke.</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>Each frame must have its <strong>own</strong> locals, or recursion clobbers itself.</li>
+        <li>Call-stack overflow (runaway recursion) must fail loudly.</li>
+        <li>Returning from the top-level frame is an error, not a jump into nowhere.</li>
+        <li>Key insight: the return value rides on the <em>shared</em> operand stack, so <code>return</code> moves almost nothing.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 5</span> The assembler</h2>
+    <p class="goal">Goal: replace hand-built C arrays with programs written in a text file (<code>.tvm</code>), so you can write real programs without recompiling the VM.</p>
+    <h3>Concepts</h3>
+    <ul>
+      <li><strong>Two-pass design.</strong> Pass 1: scan the text, assign each instruction an address, record every <code>label:</code> → its address. Pass 2: emit instructions, resolving label references (for jumps/calls) to addresses.</li>
+      <li><strong>Why two passes:</strong> a jump or call may target a label defined <em>later</em> in the file (a forward reference). You can't resolve addresses until every label is known — hence a full first pass before emitting.</li>
+      <li>Parsing: strip comments, split into tokens, map mnemonics → operations, parse operands (integers, or labels to be resolved).</li>
+    </ul>
+    <div class="doneline"><strong>Done when:</strong> the Stage 4 Fibonacci program, now written as a <code>.tvm</code> text file and assembled, still prints <code>6765</code>.</div>
+    <div class="traps">
+      <p class="traps-h">Traps</p>
+      <ul>
+        <li>Program length is now unknown up front — this is the legitimate place for a growable buffer (the dynamic-allocation instinct finally belongs here).</li>
+        <li>Undefined labels, duplicate labels, and unknown mnemonics should be reported with a line number, not silently mishandled.</li>
+        <li>Keep the assembler entirely separate from the VM — the VM still only consumes an instruction array.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">Stage 6</span> Polish — portfolio-grade</h2>
+    <p class="goal">Goal: make it feel like a real tool. Cheap to add, disproportionately impressive.</p>
+    <ul class="check">
+      <li>A <strong>trace mode</strong> (flag) that prints each instruction as it executes, using the name helper — invaluable for debugging your own bytecode.</li>
+      <li>Robust <strong>runtime errors</strong> with context (over/underflow, div-by-zero, bad jump, bad slot) — fail loudly and clearly.</li>
+      <li>A small <strong>command-line interface</strong>: run a file, disassemble a file, run-with-trace. (Where <code>argv</code> finally gets used — with the correct <code>char **</code> type.)</li>
+      <li><strong>File organization</strong>: split into headers (declarations) and source (definitions) once VM and assembler are clearly distinct. Add include guards (they defend against the double-paste of <code>#include</code>).</li>
+      <li>A <strong>README</strong>: what it is, how to build/run, the instruction set, an annotated example, and the architecture (the three-piece model).</li>
+      <li>A few <strong>example programs</strong> (<code>fib</code>, <code>factorial</code>, <code>gcd</code>) checked in.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">▤</span> Instruction-set planning table</h2>
+    <p>Fill this in as you go. Names are yours to choose; this is a planning aid.</p>
+    <table>
+      <thead>
+        <tr><th>Category</th><th>Operation(s)</th><th>Carries operand?</th><th>Stage</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Constant onto stack</td><td>push</td><td>yes (the value)</td><td>1</td></tr>
+        <tr><td>Arithmetic</td><td>add, sub, mul, div, (mod, neg)</td><td>no</td><td>1</td></tr>
+        <tr><td>Observe / halt</td><td>print, halt</td><td>no</td><td>1</td></tr>
+        <tr><td>Stack shuffling</td><td>pop, dup, swap (as needed)</td><td>no</td><td>1–2</td></tr>
+        <tr><td>Comparison</td><td>eq, ne, lt, le, gt, ge</td><td>no</td><td>2</td></tr>
+        <tr><td>Control flow</td><td>jmp, jz, jnz</td><td>yes (address)</td><td>2</td></tr>
+        <tr><td>Locals</td><td>load, store</td><td>yes (slot #)</td><td>3</td></tr>
+        <tr><td>Functions</td><td>call, ret</td><td>call: yes</td><td>4</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2><span class="num">✓</span> Self-assessment rubric</h2>
+    <p>Rate yourself honestly at each stage. "Done" means all three:</p>
+    <ol class="rubric">
+      <li><strong>It works</strong> — the stage's acceptance test passes.</li>
+      <li><strong>It's robust</strong> — bad input fails loudly (bounds, div-by-zero, bad targets), not with silent corruption or a mystery crash.</li>
+      <li><strong>You can explain it</strong> — every line, and <em>why</em> the design is the way it is.</li>
+    </ol>
+    <p class="note">A stage that passes (1) but not (3) is not complete for the purposes of this assessment — understanding is the deliverable; the binary is just evidence.</p>
+  </section>
+
+  <section>
+    <h2><span class="num">▣</span> Milestone checklist — the short version</h2>
+    <ul class="check">
+      <li><strong>M0</strong> — Disassembler prints the hand-built program in words.</li>
+      <li><strong>M1</strong> — <code>2 + 3</code>-style arithmetic program prints <code>5</code>.</li>
+      <li><strong>M2</strong> — Iterative loop sums 1..10 → <code>55</code>.</li>
+      <li><strong>M3</strong> — Iterative factorial → <code>fact(10) = 3628800</code>.</li>
+      <li><strong>M4</strong> — Recursive Fibonacci → <code>fib(20) = 6765</code>. &nbsp;★ core proven</li>
+      <li><strong>M5</strong> — Same Fibonacci, now from a <code>.tvm</code> text file → <code>6765</code>.</li>
+      <li><strong>M6</strong> — Trace mode, CLI, README, examples — portfolio-ready.</li>
+    </ul>
+  </section>
+
+  <footer>
+    TinyVM · build specification &amp; self-assessment · conceptual guidance only — the implementation is yours
+  </footer>
+
+</div>
+</body>
+</html>
